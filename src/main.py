@@ -5,13 +5,21 @@ import numpy as np
 import copy
 import sys
 
-# 50% men and 50% women
-# women: 50% use only cardio, 10% use only weights, 40% use both
-#           15% use rack
-# men: 10% use only cardio, 80% use only weights, 10% use both
-            # 60% use racks
+'''
+    Hours: 
+    Sunday	    8a.m.–7p.m.
+    Monday	    5:45a.m.–10p.m.
+    Tuesday	    5:45a.m.–10p.m.
+    Wednesday	5:45a.m.–10p.m.
+    Thursday	5:45a.m.–10p.m.
+    Friday	    5:45a.m.–10p.m.
+    Saturday	8a.m.–7p.m.
 
-SIM_TIME = 10000
+    6510 minutes/week
+    26040 minutes/month
+'''
+
+SIM_TIME = 26040
 INTERARRAVAL_TIME = 5
 NUMBER_OF_SIMULATIONS = 5
 NUMBER_OF_CUSTOMERS = [0 for i in range(NUMBER_OF_SIMULATIONS)]
@@ -23,6 +31,72 @@ wait_times = [{
     'rack_wait_time': 0,
     'free_weights_wait_time': 0
 } for i in range(NUMBER_OF_SIMULATIONS)]
+
+input_params = [
+    # Original
+    {
+        'number_of_free_weights': 8,
+        'number_of_racks': 2,
+        'number_of_machines': 7,
+        'number_of_bikes': 50,
+        'number_of_cardio': 20,
+        'number_of_benches': 2,
+        'changed': 'original'
+    },
+    # Change cardio
+    {
+        'number_of_free_weights': 8,
+        'number_of_racks': 3,
+        'number_of_machines': 7,
+        'number_of_bikes': 50,
+        'number_of_cardio': 14,
+        'number_of_benches': 2,
+        'changed': 'cardio'
+    },
+    # Change free weights
+    {
+        'number_of_free_weights': 7,
+        'number_of_racks': 3,
+        'number_of_machines': 7,
+        'number_of_bikes': 50,
+        'number_of_cardio': 20,
+        'number_of_benches': 2,
+        'changed': 'free weights'
+    },
+    # Change bikes
+    {
+        'number_of_free_weights': 8,
+        'number_of_racks': 3,
+        'number_of_machines': 7,
+        'number_of_bikes': 38,
+        'number_of_cardio': 20,
+        'number_of_benches': 2,
+        'changed': 'bikes'
+    },
+    # Change machines
+    {
+        'number_of_free_weights': 8,
+        'number_of_racks': 3,
+        'number_of_machines': 5,
+        'number_of_bikes': 50,
+        'number_of_cardio': 20,
+        'number_of_benches': 2,
+        'changed': 'machines'
+    },
+    # Change Benches
+    {
+        'number_of_free_weights': 8,
+        'number_of_racks': 3,
+        'number_of_machines': 7,
+        'number_of_bikes': 50,
+        'number_of_cardio': 20,
+        'number_of_benches': 1,
+        'changed': 'benches'
+    }
+]
+
+total_average_wait_times = [[] for i in range(NUMBER_OF_SIMULATIONS)]
+
 
 def weights(id, env, gym, wait_times):
     arrive_time = env.now
@@ -74,8 +148,27 @@ def benches(id, env, gym, wait_times):
         yield env.process(gym.bench_press(id))
         #print ('Customer {0} finished using a bench at {1:2f}'.format(id, env.now))
 
-weight_activities = [weights, racks, machines, benches]
+weight_activities = [
+    {'activity': weights, 'probability': 35}, 
+    {'activity': racks, 'probability': 20}, 
+    {'activity': machines, 'probability': 25}, 
+    {'activity': benches, 'probability': 20}
+]
 
+# Weights:  90% -> 45
+# racks:    40% -> 20
+# machines: 30% -> 15
+# benches:  40% -> 20
+
+def get_weight_activity(activities, stream):
+    x = stream.randint(0, 100)
+    prob = 0
+    for i, activity in enumerate(activities):
+        prob += activity['probability'] 
+        if x < prob:
+            del activities
+            return activity['activity']
+    print ('ERROR, prob = {0}'.format(prob))    
 
 
 def athlete(env, id, gym, wait_times, stream):
@@ -92,27 +185,37 @@ def athlete(env, id, gym, wait_times, stream):
         if r < 32:
             activities = copy.deepcopy(weight_activities)
             # Do two weight lifting activities
-            i = stream.randint(0, 3)
-            j = i
-            while j == i:
-                j = stream.randint(0, 3)
-
-            yield env.process(activities[i](id, env, gym, wait_times))
-            yield env.process(activities[j](id, env, gym, wait_times))
+            for i in range(2):
+                activity = get_weight_activity(activities, stream)
+                yield env.process(activity(id, env, gym, wait_times))
+            
    
     # Athlete only lifts weights, no cardio (42% of them do)
     else:
         activities = copy.deepcopy(weight_activities)
         # Do three weight lifting activities
+        '''
         i = stream.randint(0, 3)
         del activities[i]
 
         for activity in activities:
             yield env.process(activity(id, env, gym, wait_times))
+        '''
+        for i in range(3):
+            activity = get_weight_activity(activities, stream)
+            yield env.process(activity(id, env, gym, wait_times))
 
 
-def setup(env, stream, NUMBER_OF_CUSTOMERS, n):
-    gym = Gym(env, stream)
+# Instantiates a Gym object and pre-fills it with athletes. 
+# Parameters:
+#       env:                    simulation environment
+#       stream:                 a random number stream
+#       NUMBER_OF_CUSTOMERS:    an array containing the number of customers for each sumulation run
+#       n:                      an integer specifying which simulation run this is
+#       session:                dictionary of input parameter values {number_of_free_weights, number_of_racks, number_of_machines, number_of_bikes, number_of_cardio, number_of_benches}
+#
+def setup(env, stream, NUMBER_OF_CUSTOMERS, n, session):
+    gym = Gym(env, stream, session)
     for i in range(2):
         env.process(athlete(env, i, gym, wait_times[n], stream))
         NUMBER_OF_CUSTOMERS[n] += 1
@@ -124,7 +227,25 @@ def setup(env, stream, NUMBER_OF_CUSTOMERS, n):
         env.process(athlete(env, i, gym, wait_times[n], stream))
 
 
+# Calculates and returns the standard deviation of a given sequence of numbers.
+# *Note* - The behavior of this function is undefined if a sequence of non-number types is provided
+# Parameters:
+#       sequence:   a list of numbers
+#
+def standard_deviation(sequence):
+    sd = 0
+    mean = sum(sequence) / len(sequence)
+
+    for i, element in enumerate(sequence):
+        sd += (element ** 2) - ((i + 1) * (mean ** 2))
+
+    sd /= (len(sequence) - 1)
+    return sd
+    
+
 def results(num_cust, n):
+    total_average_wait_time = sum(wait_times[n].values())/num_cust
+    total_average_wait_times[n].append(total_average_wait_time)
     print ()
     print ('Number of Customers: {0}'.format(NUMBER_OF_CUSTOMERS[0]))
     print ('Simulation Length:   {0}'.format(SIM_TIME))
@@ -134,7 +255,12 @@ def results(num_cust, n):
     print ('    Free Weights:   {0}'.format(wait_times[n]['free_weights_wait_time']/num_cust))
     print ('    Bench:          {0}'.format(wait_times[n]['bench_wait_time']/num_cust))
     print ('    Rack:           {0}'.format(wait_times[n]['rack_wait_time']/num_cust))
-    print ()
+    print ('    Per Person:     {0}'.format(total_average_wait_time))
+
+
+def session_results(n):
+    print()
+    print('Average Customer Wait Time: {0}'.format())
 
 
 if __name__ == '__main__':
@@ -150,15 +276,16 @@ if __name__ == '__main__':
 
     seeds = sys.argv[1:6]
 
-    print (wait_times)
+    for session in input_params:
+        print('\n\nSession: {0}'.format(session['changed']))
+        for n in range(NUMBER_OF_SIMULATIONS):
+            stream = np.random.RandomState(int(seeds[n]))
+            env = simpy.Environment()
+            env.process(setup(env, stream, NUMBER_OF_CUSTOMERS, n, session))
+            env.run(until=SIM_TIME)
+            results(NUMBER_OF_CUSTOMERS[n], n)
 
-
-    for n in range (NUMBER_OF_SIMULATIONS):
-        stream = np.random.RandomState(int(seeds[n]))
-        env = simpy.Environment()
-        env.process(setup(env, stream, NUMBER_OF_CUSTOMERS, n))
-        env.run(until=SIM_TIME)
-        results(NUMBER_OF_CUSTOMERS[n], n)
+    print(total_average_wait_times)
 
 
 

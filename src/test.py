@@ -1,12 +1,16 @@
+import numpy as np
 
+b = 1/10
+b = 10
 
-def one():
-    print ('one')
+seed = 5
 
-def two():
-    print ('two')
+stream = np.random.RandomState(int(seed))
 
-calls = [one, two]
+for i in range(14):
+    print (stream.exponential(b))
 
-for i in calls:
-    i()
+print ()
+
+for i in range(12):
+    print (stream.normal(5))
