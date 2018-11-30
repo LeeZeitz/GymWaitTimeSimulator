@@ -9,6 +9,12 @@ MACHINE_TIME = 28.05
 RACK_TIME = 16.61
 BENCH_TIME = 8.57
 
+# Reps: U ~ [8 - 12]
+# Time per rep: [1s - 4s]
+# Sets: 3
+# Rest Period: 300 seconds per exercise
+# Exercises: 6-12
+
 class Gym(object):
 
     def __init__(self, env, stream, session):
@@ -23,19 +29,36 @@ class Gym(object):
 
     
     def lift_free_weights(self, id):
-        yield self.env.timeout(self.stream.exponential(FREE_WEIGHT_TIME))
+        yield self.env.timeout(self.get_exercise_time(5, 300))
 
     def use_rack(self, id):
-        yield self.env.timeout(self.stream.exponential(RACK_TIME))
+        yield self.env.timeout(self.get_exercise_time(2, 500))
 
     def do_cardio(self, id):
-        yield self.env.timeout(self.stream.exponential(CARDIO_TIME))
+        yield self.env.timeout(self.stream.normal(CARDIO_TIME))
 
     def ride_bike(self, id):
-        yield self.env.timeout(self.stream.exponential(BIKE_TIME))
+        yield self.env.timeout(self.stream.normal(BIKE_TIME))
 
     def weight_machines(self, id):
-        yield self.env.timeout(self.stream.exponential(MACHINE_TIME))
+        yield self.env.timeout(self.get_exercise_time(5, 300))
 
     def bench_press(self, id):
-        yield self.env.timeout(self.stream.exponential(BENCH_TIME))
+        yield self.env.timeout(self.get_exercise_time(2, 400))
+
+    
+    # Returns a random amount of time a piece of equipment will be in use
+    # Parameters:
+    #       number_of_exercises:    (int) the number of exercises to calculate the service time of
+    #       rest:                   (int) the expected number of seconds of rest required for a set of exercises
+    #
+    def get_exercise_time(self, number_of_exercises, rest):
+        # Initialize equipment_time with 5 minute rest/prep period
+        equipment_time = rest
+        for i in range(number_of_exercises):
+            reps = self.stream.randint(8, 12)
+            time_per_rep =  self.stream.randint(1, 4)
+            equipment_time += reps * time_per_rep
+        print (equipment_time/60)
+        return equipment_time/60
+
