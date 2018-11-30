@@ -19,19 +19,7 @@ import sys
     26040 minutes/month
 '''
 
-SIM_TIME = 26040
-INTERARRAVAL_TIME = 5
-NUMBER_OF_SIMULATIONS = 5
-NUMBER_OF_CUSTOMERS = [0 for i in range(NUMBER_OF_SIMULATIONS)]
-
-wait_times = [{
-    'cardio_wait_time': 0,
-    'bench_wait_time': 0,
-    'machines_wait_time': 0,
-    'rack_wait_time': 0,
-    'free_weights_wait_time': 0
-} for i in range(NUMBER_OF_SIMULATIONS)]
-
+# Number of each type of equipment for each simulation
 input_params = [
     # Original
     {
@@ -95,7 +83,18 @@ input_params = [
     }
 ]
 
+SIM_TIME = 26040
+INTERARRAVAL_TIME = 3.5
+NUMBER_OF_SIMULATIONS = 5
+NUMBER_OF_CUSTOMERS = [0 for i in range(NUMBER_OF_SIMULATIONS)]
 total_average_wait_times = [[] for i in range(NUMBER_OF_SIMULATIONS)]
+wait_times = [{
+    'cardio_wait_time': 0,
+    'bench_wait_time': 0,
+    'machines_wait_time': 0,
+    'rack_wait_time': 0,
+    'free_weights_wait_time': 0
+} for i in range(NUMBER_OF_SIMULATIONS)]
 
 
 def weights(id, env, gym, wait_times):
@@ -149,8 +148,8 @@ def benches(id, env, gym, wait_times):
         #print ('Customer {0} finished using a bench at {1:2f}'.format(id, env.now))
 
 weight_activities = [
-    {'activity': weights, 'probability': 35}, 
-    {'activity': racks, 'probability': 20}, 
+    {'activity': weights, 'probability': 30}, 
+    {'activity': racks, 'probability': 25}, 
     {'activity': machines, 'probability': 25}, 
     {'activity': benches, 'probability': 20}
 ]
@@ -216,7 +215,7 @@ def athlete(env, id, gym, wait_times, stream):
 #
 def setup(env, stream, NUMBER_OF_CUSTOMERS, n, session):
     gym = Gym(env, stream, session)
-    for i in range(2):
+    for i in range(5):
         env.process(athlete(env, i, gym, wait_times[n], stream))
         NUMBER_OF_CUSTOMERS[n] += 1
 
