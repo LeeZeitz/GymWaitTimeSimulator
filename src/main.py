@@ -2,6 +2,7 @@ import simpy
 from gym import Gym
 import random
 import numpy as np
+import scipy.stats
 import copy
 import sys
 
@@ -87,8 +88,10 @@ SIM_TIME = 26040
 INTERARRAVAL_TIME = 3.5
 NUMBER_OF_SIMULATIONS = 5
 NUMBER_OF_CUSTOMERS = [0 for i in range(NUMBER_OF_SIMULATIONS)]
+
+# Each sublist in this list is Ybar for a simulation
 total_average_wait_times = [[] for i in range(NUMBER_OF_SIMULATIONS)]
-wait_times = [{
+wait_times_dict = [{
     'cardio_wait_time': 0,
     'bench_wait_time': 0,
     'machines_wait_time': 0,
@@ -97,53 +100,53 @@ wait_times = [{
 } for i in range(NUMBER_OF_SIMULATIONS)]
 
 
-def weights(id, env, gym, wait_times):
+def weights(id, env, gym, wait_times_dict):
     arrive_time = env.now
     with gym.weights.request() as request:
         yield request
         #print ('Customer {0} starts using free weights at {1:2f}'.format(id, env.now))
         start_time = env.now
-        wait_times['free_weights_wait_time'] += start_time - arrive_time
+        wait_times_dict['free_weights_wait_time'] += start_time - arrive_time
         yield env.process(gym.lift_free_weights(id))
         #print ('Customer {0} finished using free weights at {1:2f}'.format(id, env.now))
 
-def cardio(id, env, gym, wait_times):
+def cardio(id, env, gym, wait_times_dict):
     arrive_time = env.now
     with gym.cardio.request() as request:
         yield request
         #print ('Customer {0} starts using cardio at {1:2f}'.format(id, env.now))
         start_time = env.now
-        wait_times['cardio_wait_time'] += start_time - arrive_time
+        wait_times_dict['cardio_wait_time'] += start_time - arrive_time
         yield env.process(gym.do_cardio(id))
         #print ('Customer {0} finished doing cardio at {1:2f}'.format(id, env.now))
 
-def racks(id, env, gym, wait_times):
+def racks(id, env, gym, wait_times_dict):
     arrive_time = env.now
     with gym.racks.request() as request:
         yield request
         #print ('Customer {0} starts using rack at {1:2f}'.format(id, env.now))
         start_time = env.now
-        wait_times['rack_wait_time'] += start_time - arrive_time
+        wait_times_dict['rack_wait_time'] += start_time - arrive_time
         yield env.process(gym.use_rack(id))
         #print ('Customer {0} finished using rack at {1:2f}'.format(id, env.now))
 
-def machines(id, env, gym, wait_times):
+def machines(id, env, gym, wait_times_dict):
     arrive_time = env.now
     with gym.machines.request() as request:
         yield request
         #print ('Customer {0} starts using weight machines at {1:2f}'.format(id, env.now))
         start_time = env.now
-        wait_times['machines_wait_time'] += start_time - arrive_time
+        wait_times_dict['machines_wait_time'] += start_time - arrive_time
         yield env.process(gym.weight_machines(id))
         #print ('Customer {0} finished using weight machines at {1:2f}'.format(id, env.now))
 
-def benches(id, env, gym, wait_times):
+def benches(id, env, gym, wait_times_dict):
     arrive_time = env.now
     with gym.benches.request() as request:
         yield request
         #print ('Customer {0} starts using a bench at {1:2f}'.format(id, env.now))
         start_time = env.now
-        wait_times['bench_wait_time'] += start_time - arrive_time
+        wait_times_dict['bench_wait_time'] += start_time - arrive_time
         yield env.process(gym.bench_press(id))
         #print ('Customer {0} finished using a bench at {1:2f}'.format(id, env.now))
 
@@ -170,7 +173,7 @@ def get_weight_activity(activities, stream):
     print ('ERROR, prob = {0}'.format(prob))    
 
 
-def athlete(env, id, gym, wait_times, stream):
+def athlete(env, id, gym, wait_times_dict, stream):
     #print('Customer {0} has arrived at the gym at {1:2f}'.format(id, env.now))
 
     r = stream.randint(0, 100)
@@ -178,7 +181,7 @@ def athlete(env, id, gym, wait_times, stream):
     # Athlete does cardio (56% of them do)
     if r < 58:
 
-        yield env.process(cardio(id, env, gym, wait_times))
+        yield env.process(cardio(id, env, gym, wait_times_dict))
 
         # Lift weights as well as doing cardio (32% do)
         if r < 32:
@@ -186,7 +189,7 @@ def athlete(env, id, gym, wait_times, stream):
             # Do two weight lifting activities
             for i in range(2):
                 activity = get_weight_activity(activities, stream)
-                yield env.process(activity(id, env, gym, wait_times))
+                yield env.process(activity(id, env, gym, wait_times_dict))
             
    
     # Athlete only lifts weights, no cardio (42% of them do)
@@ -202,7 +205,7 @@ def athlete(env, id, gym, wait_times, stream):
         '''
         for i in range(3):
             activity = get_weight_activity(activities, stream)
-            yield env.process(activity(id, env, gym, wait_times))
+            yield env.process(activity(id, env, gym, wait_times_dict))
 
 
 # Instantiates a Gym object and pre-fills it with athletes. 
@@ -216,14 +219,14 @@ def athlete(env, id, gym, wait_times, stream):
 def setup(env, stream, NUMBER_OF_CUSTOMERS, n, session):
     gym = Gym(env, stream, session)
     for i in range(5):
-        env.process(athlete(env, i, gym, wait_times[n], stream))
+        env.process(athlete(env, i, gym, wait_times_dict[n], stream))
         NUMBER_OF_CUSTOMERS[n] += 1
 
     while True:
         yield env.timeout(stream.exponential(INTERARRAVAL_TIME))
         i += 1
         NUMBER_OF_CUSTOMERS[n] += 1
-        env.process(athlete(env, i, gym, wait_times[n], stream))
+        env.process(athlete(env, i, gym, wait_times_dict[n], stream))
 
 
 # Calculates and returns the standard deviation of a given sequence of numbers.
@@ -242,18 +245,29 @@ def standard_deviation(sequence):
     return sd
     
 
+# Calculates the confidence interval of a given set of data with a given confidence
+# Parameters:
+#       confidence:     (float) decimal from 0 to 1 specifying confidence level to calculate interval with
+#       data:           (list) numerical data to calculate confidence interval on
+#
+def confidence_interval(confidence, data):
+    float_data = np.array(data) * 1.0
+    interval = scipy.stats.sem(float_data) * scipy.stats.t.ppf((confidence + 1) / float(2), len(float_data) - 1)
+    return interval
+
+
 def results(num_cust, n):
-    total_average_wait_time = sum(wait_times[n].values())/num_cust
+    total_average_wait_time = sum(wait_times_dict[n].values())/num_cust
     total_average_wait_times[n].append(total_average_wait_time)
     print ()
     print ('Number of Customers: {0}'.format(NUMBER_OF_CUSTOMERS[0]))
     print ('Simulation Length:   {0}'.format(SIM_TIME))
     print ('Average Wait Times: ')
-    print ('    Cardio:         {0}'.format(wait_times[n]['cardio_wait_time']/num_cust))
-    print ('    Machines:       {0}'.format(wait_times[n]['machines_wait_time']/num_cust))
-    print ('    Free Weights:   {0}'.format(wait_times[n]['free_weights_wait_time']/num_cust))
-    print ('    Bench:          {0}'.format(wait_times[n]['bench_wait_time']/num_cust))
-    print ('    Rack:           {0}'.format(wait_times[n]['rack_wait_time']/num_cust))
+    print ('    Cardio:         {0}'.format(wait_times_dict[n]['cardio_wait_time']/num_cust))
+    print ('    Machines:       {0}'.format(wait_times_dict[n]['machines_wait_time']/num_cust))
+    print ('    Free Weights:   {0}'.format(wait_times_dict[n]['free_weights_wait_time']/num_cust))
+    print ('    Bench:          {0}'.format(wait_times_dict[n]['bench_wait_time']/num_cust))
+    print ('    Rack:           {0}'.format(wait_times_dict[n]['rack_wait_time']/num_cust))
     print ('    Per Person:     {0}'.format(total_average_wait_time))
 
 
@@ -285,6 +299,7 @@ if __name__ == '__main__':
             results(NUMBER_OF_CUSTOMERS[n], n)
 
     print(total_average_wait_times)
+    print(wait_times)
 
 
 
