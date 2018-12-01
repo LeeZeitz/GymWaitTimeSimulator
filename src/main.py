@@ -5,6 +5,7 @@ import numpy as np
 import scipy.stats
 import copy
 import sys
+from pprint import pprint
 
 '''
     Hours: 
@@ -92,11 +93,11 @@ NUMBER_OF_CUSTOMERS = [0 for i in range(NUMBER_OF_SIMULATIONS)]
 # Each sublist in this list is Ybar for a simulation
 total_average_wait_times = [[] for i in range(NUMBER_OF_SIMULATIONS)]
 wait_times_dict = [{
-    'cardio_wait_time': 0,
-    'bench_wait_time': 0,
-    'machines_wait_time': 0,
-    'rack_wait_time': 0,
-    'free_weights_wait_time': 0
+    'cardio_wait_time': [],
+    'bench_wait_time': [],
+    'machines_wait_time': [],
+    'rack_wait_time': [],
+    'free_weights_wait_time': []
 } for i in range(NUMBER_OF_SIMULATIONS)]
 
 
@@ -106,7 +107,7 @@ def weights(id, env, gym, wait_times_dict):
         yield request
         #print ('Customer {0} starts using free weights at {1:2f}'.format(id, env.now))
         start_time = env.now
-        wait_times_dict['free_weights_wait_time'] += start_time - arrive_time
+        wait_times_dict['free_weights_wait_time'].append(start_time - arrive_time)
         yield env.process(gym.lift_free_weights(id))
         #print ('Customer {0} finished using free weights at {1:2f}'.format(id, env.now))
 
@@ -116,7 +117,7 @@ def cardio(id, env, gym, wait_times_dict):
         yield request
         #print ('Customer {0} starts using cardio at {1:2f}'.format(id, env.now))
         start_time = env.now
-        wait_times_dict['cardio_wait_time'] += start_time - arrive_time
+        wait_times_dict['cardio_wait_time'].append(start_time - arrive_time)
         yield env.process(gym.do_cardio(id))
         #print ('Customer {0} finished doing cardio at {1:2f}'.format(id, env.now))
 
@@ -126,7 +127,7 @@ def racks(id, env, gym, wait_times_dict):
         yield request
         #print ('Customer {0} starts using rack at {1:2f}'.format(id, env.now))
         start_time = env.now
-        wait_times_dict['rack_wait_time'] += start_time - arrive_time
+        wait_times_dict['rack_wait_time'].append(start_time - arrive_time)
         yield env.process(gym.use_rack(id))
         #print ('Customer {0} finished using rack at {1:2f}'.format(id, env.now))
 
@@ -136,7 +137,7 @@ def machines(id, env, gym, wait_times_dict):
         yield request
         #print ('Customer {0} starts using weight machines at {1:2f}'.format(id, env.now))
         start_time = env.now
-        wait_times_dict['machines_wait_time'] += start_time - arrive_time
+        wait_times_dict['machines_wait_time'].append(start_time - arrive_time)
         yield env.process(gym.weight_machines(id))
         #print ('Customer {0} finished using weight machines at {1:2f}'.format(id, env.now))
 
@@ -146,7 +147,7 @@ def benches(id, env, gym, wait_times_dict):
         yield request
         #print ('Customer {0} starts using a bench at {1:2f}'.format(id, env.now))
         start_time = env.now
-        wait_times_dict['bench_wait_time'] += start_time - arrive_time
+        wait_times_dict['bench_wait_time'].append(start_time - arrive_time)
         yield env.process(gym.bench_press(id))
         #print ('Customer {0} finished using a bench at {1:2f}'.format(id, env.now))
 
@@ -257,18 +258,29 @@ def confidence_interval(confidence, data):
 
 
 def results(num_cust, n):
-    total_average_wait_time = sum(wait_times_dict[n].values())/num_cust
-    total_average_wait_times[n].append(total_average_wait_time)
+
+    avg_rack_wt = sum(wait_times_dict[n]['rack_wait_time']) / num_cust
+    avg_weights_wt = sum(wait_times_dict[n]['free_weights_wait_time']) / num_cust
+    avg_cardio_wt = sum(wait_times_dict[n]['cardio_wait_time']) / num_cust
+    #avg_bike_wt = sum(wait_times_dict[n]['bike_wait_time']) / num_cust
+    avg_bench_wt = sum(wait_times_dict[n]['bench_wait_time']) / num_cust
+    avg_machine_wt = sum(wait_times_dict[n]['machines_wait_time']) / num_cust
+    avg_person_wt = avg_bench_wt + avg_cardio_wt + avg_machine_wt + avg_rack_wt + avg_weights_wt
+
+    #total_average_wait_time = sum(wait_times_dict[n].values())/num_cust
+
+#    total_average_wait_times[n].append(total_average_wait_time)
     print ()
     print ('Number of Customers: {0}'.format(NUMBER_OF_CUSTOMERS[0]))
     print ('Simulation Length:   {0}'.format(SIM_TIME))
     print ('Average Wait Times: ')
-    print ('    Cardio:         {0}'.format(wait_times_dict[n]['cardio_wait_time']/num_cust))
-    print ('    Machines:       {0}'.format(wait_times_dict[n]['machines_wait_time']/num_cust))
-    print ('    Free Weights:   {0}'.format(wait_times_dict[n]['free_weights_wait_time']/num_cust))
-    print ('    Bench:          {0}'.format(wait_times_dict[n]['bench_wait_time']/num_cust))
-    print ('    Rack:           {0}'.format(wait_times_dict[n]['rack_wait_time']/num_cust))
-    print ('    Per Person:     {0}'.format(total_average_wait_time))
+    print ('    Cardio:         {0}'.format(avg_cardio_wt))
+    print ('    Machines:       {0}'.format(avg_machine_wt))
+    print ('    Free Weights:   {0}'.format(avg_weights_wt))
+    print ('    Bench:          {0}'.format(avg_bench_wt))
+    print ('    Rack:           {0}'.format(avg_rack_wt))
+    print ('    Per Person:     {0}'.format(avg_person_wt))
+
 
 
 def session_results(n):
@@ -297,9 +309,6 @@ if __name__ == '__main__':
             env.process(setup(env, stream, NUMBER_OF_CUSTOMERS, n, session))
             env.run(until=SIM_TIME)
             results(NUMBER_OF_CUSTOMERS[n], n)
-
-    print(total_average_wait_times)
-    print(wait_times)
 
 
 
