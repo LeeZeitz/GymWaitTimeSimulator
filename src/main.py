@@ -257,6 +257,11 @@ def confidence_interval(confidence, data):
     return interval
 
 
+# Prints the simulation results in a nice, readable way
+# Parameters:
+#       num_cust:   (int) the number of customers served in the simulation    
+#       n:          (int) the index in the wait_time_dict for the current simulation
+#
 def results(num_cust, n):
 
     avg_rack_wt = sum(wait_times_dict[n]['rack_wait_time']) / num_cust
@@ -267,9 +272,6 @@ def results(num_cust, n):
     avg_machine_wt = sum(wait_times_dict[n]['machines_wait_time']) / num_cust
     avg_person_wt = avg_bench_wt + avg_cardio_wt + avg_machine_wt + avg_rack_wt + avg_weights_wt
 
-    #total_average_wait_time = sum(wait_times_dict[n].values())/num_cust
-
-#    total_average_wait_times[n].append(total_average_wait_time)
     print ()
     print ('Number of Customers: {0}'.format(NUMBER_OF_CUSTOMERS[0]))
     print ('Simulation Length:   {0}'.format(SIM_TIME))
@@ -280,7 +282,6 @@ def results(num_cust, n):
     print ('    Bench:          {0}'.format(avg_bench_wt))
     print ('    Rack:           {0}'.format(avg_rack_wt))
     print ('    Per Person:     {0}'.format(avg_person_wt))
-
 
 
 def session_results(n):
