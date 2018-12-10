@@ -5,7 +5,8 @@ import numpy as np
 import scipy.stats
 import copy
 import sys
-from pprint import pprint
+import matplotlib.pyplot as plt
+import csv
 
 '''
     Hours: 
@@ -19,6 +20,7 @@ from pprint import pprint
 
     6510 minutes/week
     26040 minutes/month
+    338520 minutes/year
 '''
 
 # Number of each type of equipment for each simulation
@@ -72,7 +74,9 @@ input_params = [
         'number_of_cardio': 20,
         'number_of_benches': 2,
         'changed': 'machines'
-    },
+    }]
+'''
+    ,
     # Change Benches
     {
         'number_of_free_weights': 8,
@@ -84,10 +88,20 @@ input_params = [
         'changed': 'benches'
     }
 ]
+'''
 
-SIM_TIME = 26040
-INTERARRAVAL_TIME = 3.5
-NUMBER_OF_SIMULATIONS = 5
+labels = (
+    'original',
+    'cardio',
+    'free weights',
+    'bikes',
+    'machines'
+)
+
+
+SIM_TIME = 338520
+INTERARRAVAL_TIME = 3.62
+NUMBER_OF_SIMULATIONS = 10
 NUMBER_OF_CUSTOMERS = [0 for i in range(NUMBER_OF_SIMULATIONS)]
 
 # Each sublist in this list is Ybar for a simulation
@@ -100,6 +114,8 @@ wait_times_dict = [{
     'free_weights_wait_time': []
 } for i in range(NUMBER_OF_SIMULATIONS)]
 
+sim_averages = [[] for i in range(len(input_params))]
+sim_vars = [[] for i in range(len(input_params))]
 
 def weights(id, env, gym, wait_times_dict):
     arrive_time = env.now
@@ -197,13 +213,6 @@ def athlete(env, id, gym, wait_times_dict, stream):
     else:
         activities = copy.deepcopy(weight_activities)
         # Do three weight lifting activities
-        '''
-        i = stream.randint(0, 3)
-        del activities[i]
-
-        for activity in activities:
-            yield env.process(activity(id, env, gym, wait_times))
-        '''
         for i in range(3):
             activity = get_weight_activity(activities, stream)
             yield env.process(activity(id, env, gym, wait_times_dict))
@@ -230,39 +239,12 @@ def setup(env, stream, NUMBER_OF_CUSTOMERS, n, session):
         env.process(athlete(env, i, gym, wait_times_dict[n], stream))
 
 
-# Calculates and returns the standard deviation of a given sequence of numbers.
-# *Note* - The behavior of this function is undefined if a sequence of non-number types is provided
-# Parameters:
-#       sequence:   a list of numbers
-#
-def standard_deviation(sequence):
-    sd = 0
-    mean = sum(sequence) / len(sequence)
-
-    for i, element in enumerate(sequence):
-        sd += (element ** 2) - ((i + 1) * (mean ** 2))
-
-    sd /= (len(sequence) - 1)
-    return sd
-    
-
-# Calculates the confidence interval of a given set of data with a given confidence
-# Parameters:
-#       confidence:     (float) decimal from 0 to 1 specifying confidence level to calculate interval with
-#       data:           (list) numerical data to calculate confidence interval on
-#
-def confidence_interval(confidence, data):
-    float_data = np.array(data) * 1.0
-    interval = scipy.stats.sem(float_data) * scipy.stats.t.ppf((confidence + 1) / float(2), len(float_data) - 1)
-    return interval
-
-
 # Prints the simulation results in a nice, readable way
 # Parameters:
 #       num_cust:   (int) the number of customers served in the simulation    
 #       n:          (int) the index in the wait_time_dict for the current simulation
 #
-def results(num_cust, n):
+def single_sim_results(num_cust, n, i):
 
     avg_rack_wt = sum(wait_times_dict[n]['rack_wait_time']) / num_cust
     avg_weights_wt = sum(wait_times_dict[n]['free_weights_wait_time']) / num_cust
@@ -271,6 +253,32 @@ def results(num_cust, n):
     avg_bench_wt = sum(wait_times_dict[n]['bench_wait_time']) / num_cust
     avg_machine_wt = sum(wait_times_dict[n]['machines_wait_time']) / num_cust
     avg_person_wt = avg_bench_wt + avg_cardio_wt + avg_machine_wt + avg_rack_wt + avg_weights_wt
+
+    var_rack = np.var(wait_times_dict[n]['rack_wait_time'])
+    var_weights = np.var(wait_times_dict[n]['free_weights_wait_time'])
+    var_cardio = np.var(wait_times_dict[n]['cardio_wait_time'])
+    var_bench = np.var(wait_times_dict[n]['bench_wait_time'])
+    var_machine = np.var(wait_times_dict[n]['machines_wait_time'])
+    var_person =  var_rack + var_weights + var_cardio + var_bench + var_machine
+
+    '''
+    {
+        'cardio_wait_time': [],
+        'bench_wait_time': [],
+        'machines_wait_time': [],
+        'rack_wait_time': [],
+        'free_weights_wait_time': []
+    }
+
+    sim_averages['cardio_wait_time'].append(avg_cardio_wt)
+    sim_averages['bench_wait_time'].append(avg_bench_wt)
+    sim_averages['machines_wait_time'].append(avg_machine_wt)
+    sim_averages['rack_weight_time'].append(avg_rack_wt)
+    sim_averages['free_weights_wait_time'].append(avg_weights_wt)
+    '''
+
+    sim_averages[i].append(avg_person_wt)
+    sim_vars[i].append(var_person)
 
     print ()
     print ('Number of Customers: {0}'.format(NUMBER_OF_CUSTOMERS[0]))
@@ -284,9 +292,55 @@ def results(num_cust, n):
     print ('    Per Person:     {0}'.format(avg_person_wt))
 
 
-def session_results(n):
-    print()
-    print('Average Customer Wait Time: {0}'.format())
+# Calculates the confidence interval of a given set of data with a given confidence
+# Parameters:
+#       confidence:     (float) decimal from 0 to 1 specifying confidence level to calculate interval with
+#
+def confidence_interval(confidence, sd, n):
+    t = scipy.stats.t.ppf((confidence + 1) / float(2), n - 1)
+    se = sd / (n**0.5)
+    interval = t * se
+    return interval
+
+
+def results(cis):
+    colors = ['red', 'blue', 'green', 'purple', 'orange', 'brown', 'yellow', 'black', 'grey']
+
+    '''
+    for i, ci in enumerate(cis):
+        plotline, caplines, barlinecols = plt.errorbar([j for j in range(NUMBER_OF_SIMULATIONS)], sim_averages[i], yerr=ci, ecolor=colors[i])
+        plotline.set_color(colors[i])
+        plotlines.append(plotline)
+    plt.ylim(bottom=0)
+    plt.title('Average Gym Waiting Time When Replacing Equip. with Rack')
+    plt.ylabel('Waiting Time (minutes)')
+    plt.xlabel('Simulation Number')
+    plt.legend(tuple(plotlines), labels)
+    plt.show()
+    '''
+
+    plt.ylim(bottom=0)
+    plt.ylabel('Waiting Time (minutes)')
+    plt.xlabel('Simulation Number')
+
+    plotline, caplines, barlinecols = plt.errorbar([j for j in range(NUMBER_OF_SIMULATIONS)], sim_averages[0], yerr=cis[0], ecolor=colors[0])
+    plotline.set_color(colors[0])
+    plotlines.append(plotline)
+
+    for i, ci in enumerate(cis):
+        plotlines = []
+        if i != 0:
+            plotline, caplines, barlinecols = plt.errorbar([j for j in range(NUMBER_OF_SIMULATIONS)], sim_averages[i], yerr=ci, ecolor=colors[i])
+            plotline.set_color(colors[i])
+            plotlines.append(plotline)
+
+            print (plotlines)
+
+            plt.title('Average Gym Waiting Time When Replacing {0} with Rack'.format(labels[i]))
+            plt.legend(tuple(plotlines), [labels[0], labels[i]])
+            
+            plt.show()
+            plotlines.pop()
 
 
 if __name__ == '__main__':
@@ -300,16 +354,46 @@ if __name__ == '__main__':
         print ('need more seeds please')
         exit()
 
-    seeds = sys.argv[1:6]
+    seeds = sys.argv[1:]
 
-    for session in input_params:
-        print('\n\nSession: {0}'.format(session['changed']))
-        for n in range(NUMBER_OF_SIMULATIONS):
-            stream = np.random.RandomState(int(seeds[n]))
-            env = simpy.Environment()
-            env.process(setup(env, stream, NUMBER_OF_CUSTOMERS, n, session))
-            env.run(until=SIM_TIME)
-            results(NUMBER_OF_CUSTOMERS[n], n)
+    with open('results.csv', 'w',  newline='') as csv_file:
+
+        # Run NUMBER_OF_SIMULATION simulations for each configuration of equipment parameters
+        for i, session in enumerate(input_params):
+            # Reset waiting_times_dict to get rid of results from last configuration
+            wait_times_dict = [{
+                'cardio_wait_time': [],
+                'bench_wait_time': [],
+                'machines_wait_time': [],
+                'rack_wait_time': [],
+                'free_weights_wait_time': []
+            } for i in range(NUMBER_OF_SIMULATIONS)]
+
+            print('\n\nSession: {0}'.format(session['changed']))
+            # Run simulation NUMBER_OF_SIMULATIONS times
+            for n in range(NUMBER_OF_SIMULATIONS):
+                stream = np.random.RandomState(int(seeds[n]))
+                env = simpy.Environment()
+                env.process(setup(env, stream, NUMBER_OF_CUSTOMERS, n, session))
+                env.run(until=SIM_TIME)
+                single_sim_results(NUMBER_OF_CUSTOMERS[n], n, i)
+
+        # After simulation has run all times for a given configuration, calculate and store ci
+
+        print (sim_averages)
+
+        cis = []
+
+        for sim_average in sim_averages:
+            writer = csv.writer(csv_file)
+            writer.writerow(sim_average)
+            average_wait_time = np.mean(sim_average)
+            average_var = np.var(sim_average)
+            cis.append(confidence_interval(0.95, average_var**0.5, len(sim_average)))
+
+        print (cis)
+
+        results(cis)
 
 
 
